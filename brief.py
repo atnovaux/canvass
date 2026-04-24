@@ -32,7 +32,7 @@ import dns.exception
 # Banner & Progress
 # ============================================================================
 
-VERSION = "1.2.7"
+VERSION = "1.2.8"
 BUILD_DATE = "2026-04-23"
 
 BANNER = r"""
@@ -2822,6 +2822,9 @@ def render_text(brief: Brief, companion_files: dict | None = None) -> str:
                 desc = t.get("description", "")
                 if desc:
                     lines.append(f"      {desc[:180]}")
+        elif brief.subdomains:
+            # BBOT ran with baddns modules but found nothing — surface that it ran
+            lines.append(f"  Takeovers:     0 (checked via baddns, clean)")
 
         # Notable subdomains — categorize from ALL sources, not just BBOT.
         # Previous behavior missed canvass's own discoveries (adfs, owa, vpn, etc.)
@@ -3209,20 +3212,25 @@ def render_plain(brief: Brief, brief_md_path: Path, companion_files: dict[str, P
         ref = f" → {tech_file.name}" if tech_file else ""
         rows.append(("Technologies", f"{len(brief.technologies)}{ref}"))
 
-    # Takeovers / dangling DNS findings — HIGH-value row, show even when count is 0 so user knows it ran
-    if brief.takeovers:
-        takeover_file = companion_files.get("takeovers")
-        n_vuln = sum(1 for t in brief.takeovers if t.get("type") == "VULNERABILITY")
-        n_find = len(brief.takeovers) - n_vuln
-        bits = []
-        if n_vuln:
-            bits.append(f"{n_vuln} takeover{'s' if n_vuln != 1 else ''}")
-        if n_find:
-            bits.append(f"{n_find} dangling")
-        val = ", ".join(bits)
-        if takeover_file:
-            val += f" → {takeover_file.name}"
-        rows.append(("Takeovers", val))
+    # Takeovers / dangling DNS findings — HIGH-value row, show even when count is 0 so user knows it ran.
+    # Only hide when BBOT was skipped entirely (no takeover check performed).
+    if brief.subdomains or brief.takeovers:
+        if brief.takeovers:
+            takeover_file = companion_files.get("takeovers")
+            n_vuln = sum(1 for t in brief.takeovers if t.get("type") == "VULNERABILITY")
+            n_find = len(brief.takeovers) - n_vuln
+            bits = []
+            if n_vuln:
+                bits.append(f"{n_vuln} takeover{'s' if n_vuln != 1 else ''}")
+            if n_find:
+                bits.append(f"{n_find} dangling")
+            val = ", ".join(bits)
+            if takeover_file:
+                val += f" → {takeover_file.name}"
+            rows.append(("Takeovers", val))
+        else:
+            # BBOT ran, baddns ran, found nothing — tell the operator
+            rows.append(("Takeovers", "0 (baddns clean)"))
 
     # HTTP fingerprints on auth surface (Tier 2)
     if brief.http_fingerprints:
